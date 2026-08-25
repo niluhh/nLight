@@ -1,0 +1,64 @@
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ---- Xcode ----
+## Build artifacts
+build/
+DerivedData/
+*.o
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.perspectivev3
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+## Obj-C/Swift specific
+*.swiftpm/xcuserdata
+
+# ---- Swift Package Manager ----
+.build/
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+
+# ---- CocoaPods / Carthage (por si acaso) ----
+Pods/
+Carthage/Build/
+
+# ---- Varios ----
+*.log
+*.tmp

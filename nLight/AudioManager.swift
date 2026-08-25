@@ -2,18 +2,25 @@
 //  AudioManager.swift
 //  nLight
 //
-//  Captura de audio en tiempo real, FFT con Accelerate y detección de beats
-//  en el rango de bajas frecuencias (0 - 250 Hz).
+//  Captura del audio de SALIDA del sistema mediante Core Audio Taps
+//  (macOS 14.4+), FFT con Accelerate y detección de beats en el rango de
+//  bajas frecuencias (0 - 250 Hz).
+//
+//  A diferencia de un tap sobre AVAudioEngine.inputNode, esto nunca escucha
+//  el micrófono: un process tap intercepta lo que reproducen las demás apps
+//  (Spotify, Music, Safari…) sin interrumpir la reproducción y sin drivers
+//  de terceros.
 //
 
 import AVFoundation
 import Accelerate
+import AudioToolbox
 import CoreAudio
 import Foundation
 import QuartzCore
 
-/// Descripción de un dispositivo de entrada de CoreAudio.
-struct AudioInputDevice: Equatable {
+/// Dispositivo de salida de CoreAudio susceptible de ser interceptado.
+struct AudioOutputDevice: Equatable {
     let id: AudioDeviceID
     let uid: String
     let name: String
@@ -59,9 +66,19 @@ final class AudioManager: NSObject {
         return current
     }
 
-    // MARK: - Privados
+    // MARK: - Estado del tap
 
-    private let engine = AVAudioEngine()
+    private var tapID: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
+    private var aggregateID: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
+    private var ioProcID: AudioDeviceIOProcID?
+    private var tapFormat: AudioStreamBasicDescription?
+    private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
+
+    /// Cola serie sobre la que CoreAudio entrega los bloques capturados.
+    private let ioQueue = DispatchQueue(label: "com.nlight.app.audio-tap", qos: .userInteractive)
+
+    // MARK: - Estado del análisis
+
     private let stateLock = NSLock()
 
     private var latestSnapshot = AudioSnapshot()
@@ -84,7 +101,7 @@ final class AudioManager: NSObject {
     private var energyHistory: [Float] = []
     private var bassPeak: Float = 1e-4
     private var overallPeak: Float = 1e-4
-    private var sampleRate: Float = 44100
+    private var sampleRate: Float = 48000
     /// Copia local de la preferencia: el hilo de audio no debe tocar UserDefaults.
     private var beatSensitivity: Float = Float(PreferencesManager.Defaults.sensitivity)
 
@@ -109,12 +126,6 @@ final class AudioManager: NSObject {
 
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleConfigurationChange),
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(applyPreferences),
             name: PreferencesManager.didChangeNotification,
             object: nil
@@ -134,7 +145,7 @@ final class AudioManager: NSObject {
         if let fftSetup { vDSP_destroy_fftsetup(fftSetup) }
     }
 
-    /// Pide permiso de micrófono (necesario también para dispositivos virtuales de loopback).
+    /// Pide el permiso de captura de audio con el que macOS protege los process taps.
     func requestPermission(completion: @escaping (Bool) -> Void) {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
@@ -148,42 +159,40 @@ final class AudioManager: NSObject {
         }
     }
 
+    // MARK: - Arranque y parada
+
     @discardableResult
     func start() -> Bool {
         guard !isRunning else { return true }
+        lastErrorDescription = nil
 
-        applyPreferredInputDevice()
-
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            lastErrorDescription = "El dispositivo de entrada no expone un formato válido."
+        guard let device = resolveTargetDevice() else {
+            fail("No se encontró ningún dispositivo de salida que interceptar.")
             return false
         }
-        sampleRate = Float(format.sampleRate)
 
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.process(buffer: buffer)
-        }
-
-        engine.prepare()
-        do {
-            try engine.start()
-            isRunning = true
-            lastErrorDescription = nil
-            return true
-        } catch {
-            input.removeTap(onBus: 0)
-            lastErrorDescription = error.localizedDescription
+        guard let deviceUID = AudioManager.stringProperty(kAudioDevicePropertyDeviceUID, of: device) else {
+            fail("El dispositivo de salida no expone un UID.")
             return false
         }
+
+        guard createTap(), createAggregateDevice(around: deviceUID), readTapFormat(), startIO() else {
+            teardown()
+            return false
+        }
+
+        observeDefaultOutputDevice()
+        isRunning = true
+        NSLog("[nLight] Captura de salida activa sobre «%@» a %.0f Hz.",
+              AudioManager.stringProperty(kAudioObjectPropertyName, of: device) ?? deviceUID,
+              Double(sampleRate))
+        return true
     }
 
     func stop() {
         guard isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        stopObservingDefaultOutputDevice()
+        teardown()
         isRunning = false
         reset()
     }
@@ -191,6 +200,144 @@ final class AudioManager: NSObject {
     func restart() {
         stop()
         _ = start()
+    }
+
+    /// Dispositivo elegido en preferencias, o la salida por defecto del sistema.
+    private func resolveTargetDevice() -> AudioDeviceID? {
+        if let uid = PreferencesManager.shared.inputDeviceUID,
+           let match = AudioManager.availableOutputDevices().first(where: { $0.uid == uid }) {
+            return match.id
+        }
+        return AudioManager.defaultOutputDevice()
+    }
+
+    // MARK: - Construcción del process tap
+
+    /// Crea un tap global privado: escucha todos los procesos y no aparece
+    /// como dispositivo público ni silencia la reproducción.
+    private func createTap() -> Bool {
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        description.name = "nLight System Output Tap"
+        description.isPrivate = true
+        // `.unmuted` es lo que garantiza que el usuario siga oyendo igual.
+        description.muteBehavior = .unmuted
+
+        var identifier = AudioObjectID(kAudioObjectUnknown)
+        let status = AudioHardwareCreateProcessTap(description, &identifier)
+        guard check(status, "AudioHardwareCreateProcessTap") else { return false }
+
+        tapID = identifier
+        tapUUID = description.uuid
+        return true
+    }
+
+    /// UUID del tap, necesario para referenciarlo desde el dispositivo agregado.
+    private var tapUUID: UUID?
+
+    /// Dispositivo agregado privado que combina la salida real con el tap.
+    /// Es el objeto sobre el que se instala el IOProc de captura.
+    private func createAggregateDevice(around outputDeviceUID: String) -> Bool {
+        guard let tapUUID else {
+            fail("El tap no devolvió un UUID válido.")
+            return false
+        }
+
+        let description: [String: Any] = [
+            kAudioAggregateDeviceNameKey: "nLight Capture",
+            kAudioAggregateDeviceUIDKey: "com.nlight.app.aggregate.\(UUID().uuidString)",
+            kAudioAggregateDeviceMainSubDeviceKey: outputDeviceUID,
+            // Privado: no se publica en Ajustes de Sonido ni altera la salida por defecto.
+            kAudioAggregateDeviceIsPrivateKey: true,
+            kAudioAggregateDeviceIsStackedKey: false,
+            kAudioAggregateDeviceTapAutoStartKey: true,
+            kAudioAggregateDeviceSubDeviceListKey: [
+                [kAudioSubDeviceUIDKey: outputDeviceUID]
+            ],
+            kAudioAggregateDeviceTapListKey: [
+                [
+                    kAudioSubTapDriftCompensationKey: true,
+                    kAudioSubTapUIDKey: tapUUID.uuidString
+                ]
+            ]
+        ]
+
+        var identifier = AudioObjectID(kAudioObjectUnknown)
+        let status = AudioHardwareCreateAggregateDevice(description as CFDictionary, &identifier)
+        guard check(status, "AudioHardwareCreateAggregateDevice") else { return false }
+
+        aggregateID = identifier
+        return true
+    }
+
+    /// Lee el formato que entrega el tap y ajusta la frecuencia de muestreo del análisis.
+    private func readTapFormat() -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioTapPropertyFormat,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        let status = AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &format)
+        guard check(status, "Lectura de kAudioTapPropertyFormat") else { return false }
+
+        guard format.mFormatFlags & kAudioFormatFlagIsFloat != 0 else {
+            fail("El tap entregó un formato no flotante (\(format.mFormatID)); no soportado.")
+            return false
+        }
+        guard format.mSampleRate > 0 else {
+            fail("El tap entregó una frecuencia de muestreo inválida.")
+            return false
+        }
+
+        tapFormat = format
+        sampleRate = Float(format.mSampleRate)
+        return true
+    }
+
+    /// Instala el IOProc sobre el dispositivo agregado y arranca la captura.
+    private func startIO() -> Bool {
+        var procID: AudioDeviceIOProcID?
+        let createStatus = AudioDeviceCreateIOProcIDWithBlock(
+            &procID,
+            aggregateID,
+            ioQueue
+        ) { [weak self] _, inputData, _, _, _ in
+            self?.ingest(inputData)
+        }
+        guard check(createStatus, "AudioDeviceCreateIOProcIDWithBlock"), let procID else {
+            return false
+        }
+        ioProcID = procID
+
+        let startStatus = AudioDeviceStart(aggregateID, procID)
+        guard check(startStatus, "AudioDeviceStart") else { return false }
+        return true
+    }
+
+    /// Desmonta el tap y todo lo construido a su alrededor, en orden inverso.
+    private func teardown() {
+        if let ioProcID {
+            if aggregateID != AudioObjectID(kAudioObjectUnknown) {
+                check(AudioDeviceStop(aggregateID, ioProcID), "AudioDeviceStop")
+                check(AudioDeviceDestroyIOProcID(aggregateID, ioProcID), "AudioDeviceDestroyIOProcID")
+            }
+            self.ioProcID = nil
+        }
+
+        if aggregateID != AudioObjectID(kAudioObjectUnknown) {
+            check(AudioHardwareDestroyAggregateDevice(aggregateID), "AudioHardwareDestroyAggregateDevice")
+            aggregateID = AudioObjectID(kAudioObjectUnknown)
+        }
+
+        if tapID != AudioObjectID(kAudioObjectUnknown) {
+            check(AudioHardwareDestroyProcessTap(tapID), "AudioHardwareDestroyProcessTap")
+            tapID = AudioObjectID(kAudioObjectUnknown)
+        }
+
+        tapUUID = nil
+        tapFormat = nil
     }
 
     private func reset() {
@@ -204,32 +351,96 @@ final class AudioManager: NSObject {
         stateLock.unlock()
     }
 
-    @objc private func handleConfigurationChange() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.isRunning else { return }
-            self.restart()
+    // MARK: - Cambios de dispositivo por defecto
+
+    /// Si el usuario cambia de altavoces a auriculares, hay que rehacer el tap.
+    private func observeDefaultOutputDevice() {
+        guard defaultDeviceListener == nil,
+              PreferencesManager.shared.inputDeviceUID == nil else { return }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            DispatchQueue.main.async {
+                guard let self, self.isRunning else { return }
+                NSLog("[nLight] Cambió la salida por defecto: reconstruyendo el tap.")
+                self.restart()
+            }
         }
+
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener
+        )
+        if check(status, "AudioObjectAddPropertyListenerBlock") {
+            defaultDeviceListener = listener
+        }
+    }
+
+    private func stopObservingDefaultOutputDevice() {
+        guard let listener = defaultDeviceListener else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        check(AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener
+        ), "AudioObjectRemovePropertyListenerBlock")
+        defaultDeviceListener = nil
     }
 
     // MARK: - Captura
 
-    /// Se ejecuta en el hilo de audio en tiempo real: sin asignaciones ni locks largos.
-    private func process(buffer: AVAudioPCMBuffer) {
-        guard let channel = buffer.floatChannelData?[0] else { return }
-        let frameCount = Int(buffer.frameLength)
+    /// Se ejecuta en la cola de audio: mezcla a mono y alimenta el buffer circular.
+    private func ingest(_ bufferList: UnsafePointer<AudioBufferList>) {
+        guard let format = tapFormat else { return }
+        let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
+        guard buffers.count > 0 else { return }
+
+        let isNonInterleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+
+        if isNonInterleaved {
+            let channels = buffers.compactMap { $0.mData?.assumingMemoryBound(to: Float.self) }
+            guard !channels.isEmpty else { return }
+            let frameCount = Int(buffers[0].mDataByteSize) / MemoryLayout<Float>.stride
+            let scale = 1 / Float(channels.count)
+            for frame in 0..<frameCount {
+                var sum: Float = 0
+                for channel in channels { sum += channel[frame] }
+                push(sum * scale)
+            }
+        } else {
+            let buffer = buffers[0]
+            guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { return }
+            let channelCount = Int(buffer.mNumberChannels)
+            guard channelCount > 0 else { return }
+            let frameCount = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.stride * channelCount)
+            let scale = 1 / Float(channelCount)
+            for frame in 0..<frameCount {
+                var sum: Float = 0
+                for channel in 0..<channelCount { sum += data[frame * channelCount + channel] }
+                push(sum * scale)
+            }
+        }
+    }
+
+    /// Acumula una muestra y lanza la FFT cada medio solapamiento.
+    private func push(_ sample: Float) {
         let size = AudioManager.fftSize
         /// Solapamiento del 50 % entre ventanas para una respuesta más fluida.
         let hopSize = size / 2
 
-        for index in 0..<frameCount {
-            sampleRing[ringWriteIndex] = channel[index]
-            ringWriteIndex = (ringWriteIndex + 1) % size
-            samplesSinceLastFFT += 1
+        sampleRing[ringWriteIndex] = sample
+        ringWriteIndex = (ringWriteIndex + 1) % size
+        samplesSinceLastFFT += 1
 
-            if samplesSinceLastFFT >= hopSize {
-                samplesSinceLastFFT = 0
-                analyzeRing()
-            }
+        if samplesSinceLastFFT >= hopSize {
+            samplesSinceLastFFT = 0
+            analyzeRing()
         }
     }
 
@@ -338,25 +549,76 @@ final class AudioManager: NSObject {
         stateLock.unlock()
     }
 
-    // MARK: - Dispositivos de entrada (CoreAudio)
+    // MARK: - Errores de CoreAudio
 
-    /// Aplica el dispositivo guardado en preferencias a la unidad de entrada del engine.
-    private func applyPreferredInputDevice() {
-        guard let uid = PreferencesManager.shared.inputDeviceUID,
-              let device = AudioManager.availableInputDevices().first(where: { $0.uid == uid }),
-              let unit = engine.inputNode.audioUnit else { return }
-
-        var deviceID = device.id
-        AudioUnitSetProperty(unit,
-                             kAudioOutputUnitProperty_CurrentDevice,
-                             kAudioUnitScope_Global,
-                             0,
-                             &deviceID,
-                             UInt32(MemoryLayout<AudioDeviceID>.size))
+    /// Registra el fallo en consola y lo guarda para mostrarlo en el menú.
+    @discardableResult
+    private func check(_ status: OSStatus, _ operation: String) -> Bool {
+        guard status != noErr else { return true }
+        let detail = "\(operation) falló: \(AudioManager.describe(status))"
+        NSLog("[nLight] %@", detail)
+        lastErrorDescription = detail
+        return false
     }
 
-    /// Lista los dispositivos del sistema que tienen al menos un canal de entrada.
-    static func availableInputDevices() -> [AudioInputDevice] {
+    private func fail(_ message: String) {
+        NSLog("[nLight] %@", message)
+        lastErrorDescription = message
+    }
+
+    /// Traduce los OSStatus de CoreAudio a algo legible, con su código FourCC.
+    private static func describe(_ status: OSStatus) -> String {
+        let known: [OSStatus: String] = [
+            kAudioHardwareNotRunningError: "el servidor de audio no está en marcha",
+            kAudioHardwareUnspecifiedError: "error no especificado del hardware de audio",
+            kAudioHardwareUnknownPropertyError: "propiedad desconocida",
+            kAudioHardwareBadPropertySizeError: "tamaño de propiedad incorrecto",
+            kAudioHardwareIllegalOperationError: "operación no permitida",
+            kAudioHardwareBadObjectError: "objeto de audio inválido",
+            kAudioHardwareBadDeviceError: "dispositivo de audio inválido",
+            kAudioHardwareBadStreamError: "stream de audio inválido",
+            kAudioHardwareUnsupportedOperationError: "operación no soportada",
+            kAudioDeviceUnsupportedFormatError: "formato no soportado por el dispositivo",
+            kAudioDevicePermissionsError: "permiso denegado: concede la captura de audio en Ajustes → Privacidad y seguridad"
+        ]
+
+        let reason = known[status] ?? "consulta la documentación de CoreAudio"
+        return "\(reason) [\(fourCharCode(status)) / OSStatus \(status)]"
+    }
+
+    /// Los errores de CoreAudio suelen ser códigos de cuatro caracteres ('!obj', 'stop'…).
+    private static func fourCharCode(_ status: OSStatus) -> String {
+        let value = UInt32(bitPattern: status)
+        let bytes = [
+            UInt8((value >> 24) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8(value & 0xFF)
+        ]
+        guard bytes.allSatisfy({ $0 >= 0x20 && $0 < 0x7F }) else { return "sin código" }
+        return "'" + String(bytes.map { Character(UnicodeScalar($0)) }) + "'"
+    }
+
+    // MARK: - Dispositivos de salida (CoreAudio)
+
+    /// Salida por defecto del sistema: lo que el usuario está oyendo ahora mismo.
+    static func defaultOutputDevice() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var device = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                                &address, 0, nil, &size, &device)
+        guard status == noErr, device != AudioObjectID(kAudioObjectUnknown) else { return nil }
+        return device
+    }
+
+    /// Lista los dispositivos del sistema que tienen al menos un canal de salida.
+    static func availableOutputDevices() -> [AudioOutputDevice] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -375,17 +637,17 @@ final class AudioManager: NSObject {
                                          &address, 0, nil, &dataSize, &deviceIDs) == noErr else { return [] }
 
         return deviceIDs.compactMap { id in
-            guard inputChannelCount(of: id) > 0,
+            guard outputChannelCount(of: id) > 0,
                   let name = stringProperty(kAudioObjectPropertyName, of: id),
                   let uid = stringProperty(kAudioDevicePropertyDeviceUID, of: id) else { return nil }
-            return AudioInputDevice(id: id, uid: uid, name: name)
+            return AudioOutputDevice(id: id, uid: uid, name: name)
         }
     }
 
-    private static func inputChannelCount(of device: AudioDeviceID) -> Int {
+    private static func outputChannelCount(of device: AudioDeviceID) -> Int {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioObjectPropertyScopeInput,
+            mScope: kAudioObjectPropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
 

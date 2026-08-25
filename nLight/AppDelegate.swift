@@ -210,14 +210,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func rebuildDeviceMenu() {
         deviceMenu.removeAllItems()
 
-        let systemDefault = NSMenuItem(title: "Entrada por defecto del sistema",
+        let systemDefault = NSMenuItem(title: "Salida por defecto del sistema",
                                        action: #selector(selectInputDevice(_:)),
                                        keyEquivalent: "")
         systemDefault.target = self
         systemDefault.state = preferences.inputDeviceUID == nil ? .on : .off
         deviceMenu.addItem(systemDefault)
 
-        let devices = AudioManager.availableInputDevices()
+        let devices = AudioManager.availableOutputDevices()
         if !devices.isEmpty { deviceMenu.addItem(.separator()) }
 
         for device in devices {
@@ -231,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         deviceMenu.addItem(.separator())
-        let hint = NSMenuItem(title: "Instala BlackHole para capturar el audio del sistema",
+        let hint = NSMenuItem(title: "Captura el audio del sistema, nunca el micrófono",
                               action: nil,
                               keyEquivalent: "")
         hint.isEnabled = false
@@ -302,11 +302,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = """
         Brillo reactivo al audio en los bordes de la pantalla.
 
-        Analiza el audio de entrada con una FFT de \(AudioManager.fftSize) muestras y \
-        detecta los beats en la banda de 0 a \(Int(AudioManager.bassUpperHz)) Hz.
+        Analiza el audio que sale del sistema con una FFT de \(AudioManager.fftSize) \
+        muestras y detecta los beats en la banda de 0 a \(Int(AudioManager.bassUpperHz)) Hz.
 
-        Para reaccionar al audio del sistema (y no al micrófono), instala un \
-        dispositivo de loopback como BlackHole y selecciónalo en «Fuente de audio».
+        Usa un process tap de CoreAudio: captura lo que suena en Spotify, Music o el \
+        navegador sin tocar el micrófono y sin instalar drivers de terceros.
 
         Proyecto de código abierto bajo licencia MIT.
         """
@@ -350,8 +350,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.messageText = "nLight necesita acceso al audio"
         alert.informativeText = """
-        Concede el permiso en Ajustes del Sistema → Privacidad y seguridad → Micrófono \
-        y vuelve a activar el brillo desde el menú.
+        macOS protege la captura del audio del sistema con un permiso. Concédelo en \
+        Ajustes del Sistema → Privacidad y seguridad y vuelve a activar el brillo \
+        desde el menú.
         """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Abrir Ajustes")

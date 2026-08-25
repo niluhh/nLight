@@ -16,6 +16,7 @@ cuentas, sin red: el audio se analiza en memoria y nunca sale de tu Mac.
 
 | | |
 |---|---|
+| 🔊 **Solo audio del sistema** | Un *process tap* de CoreAudio intercepta lo que suena en Spotify, Music o el navegador. **Nunca escucha el micrófono** y no hace falta ningún driver de terceros. |
 | 🎚️ **Análisis FFT** | Ventana de 2048 muestras con ventana de Hamming y solapamiento del 50 %, vía `Accelerate` / vDSP. |
 | 🥁 **Detección de beats** | Energía instantánea contra media móvil de ~1 s en la banda **0 – 250 Hz**, con umbral y tiempo de espera configurables. |
 | 🌈 **Cuatro bordes** | Superior e inferior con un color; izquierda y derecha con otro. Rojo y azul por defecto. |
@@ -39,11 +40,10 @@ cuentas, sin red: el audio se analiza en memoria y nunca sale de tu Mac.
 
 ## Requisitos
 
-- macOS 12 (Monterey) o posterior
-- Xcode 14 o posterior
-- Opcional pero muy recomendable: un dispositivo de audio *loopback* como
-  [BlackHole](https://github.com/ExistentialAudio/BlackHole) para capturar el
-  audio **del sistema** en lugar del micrófono.
+- **macOS 14.4 (Sonoma) o posterior** — es la versión en la que la API de
+  *process taps* de CoreAudio es utilizable.
+- Xcode 15.3 o posterior
+- Nada más: **no requiere BlackHole, Soundflower ni ningún driver de audio**.
 
 ---
 
@@ -73,10 +73,9 @@ El binario queda en `~/Library/Developer/Xcode/DerivedData/nLight-*/Build/Produc
 
 ## Cómo usarlo
 
-1. Lanza nLight. La primera vez macOS pedirá permiso de **micrófono**: acéptalo
-   (es el permiso que cubre toda captura de audio de entrada, incluidos los
-   dispositivos virtuales).
-2. Pon música.
+1. Lanza nLight. La primera vez macOS pedirá permiso para **capturar el audio
+   del sistema**: acéptalo.
+2. Pon música en cualquier app.
 3. Haz clic en el 💡 de la barra de menús para ajustar:
    - **Activar / desactivar brillo** (`⌘L` con el menú abierto)
    - **Intensidad** — cuánto responde el brillo al nivel de graves
@@ -84,24 +83,32 @@ El binario queda en `~/Library/Developer/Xcode/DerivedData/nLight-*/Build/Produc
    - **Sensibilidad al beat** — cuánto debe destacar un golpe sobre la media
      para contar como beat
    - **Color superior / inferior** y **Color izquierda / derecha**
-   - **Fuente de audio** — entrada por defecto del sistema o un dispositivo concreto
+   - **Fuente de audio** — salida por defecto del sistema, o unos altavoces /
+     auriculares concretos si tienes varios
 
 El brillo solo aparece cuando hay señal: en silencio los bordes se apagan solos.
 
-### Capturar el audio del sistema (no el micrófono)
+### Cómo captura el audio del sistema
 
-macOS no deja grabar la salida de audio directamente. La solución estándar es un
-driver de loopback:
+nLight usa la API de **process taps de CoreAudio** (macOS 14.4+):
 
-1. Instala BlackHole 2ch:
-   ```bash
-   brew install blackhole-2ch
-   ```
-2. Abre **Configuración de Audio MIDI** → **+** → **Crear dispositivo de salida
-   múltiple**, y marca tus altavoces junto con *BlackHole 2ch*.
-3. Selecciona ese dispositivo múltiple como salida del sistema (así sigues
-   oyendo la música).
-4. En nLight, elige **Fuente de audio → BlackHole 2ch**.
+1. `AudioHardwareCreateProcessTap` crea un tap global y **privado** sobre todos
+   los procesos, con `muteBehavior = .unmuted`: el audio sigue sonando en tus
+   altavoces exactamente igual.
+2. `AudioHardwareCreateAggregateDevice` monta un dispositivo agregado privado
+   que combina tu salida real con ese tap. Al ser privado no aparece en Ajustes
+   de Sonido ni cambia la salida por defecto.
+3. Un `AudioDeviceIOProc` sobre ese agregado recibe las muestras ya mezcladas en
+   estéreo, que nLight reduce a mono y pasa a la FFT.
+
+Consecuencias prácticas:
+
+- **El micrófono nunca se toca.** Un tap solo ve audio de reproducción; si hablas
+  o aplaudes, el glow no se inmuta.
+- **Sin drivers.** No hay que instalar BlackHole ni recablear la salida del
+  sistema en Configuración de Audio MIDI.
+- Si cambias de altavoces a auriculares, nLight lo detecta con un listener sobre
+  `kAudioHardwarePropertyDefaultOutputDevice` y reconstruye el tap solo.
 
 ---
 
@@ -111,26 +118,26 @@ driver de loopback:
 nLight/
 ├── main.swift                 Arranque de NSApplication
 ├── AppDelegate.swift          Barra de menús, controles y coordinación
-├── AudioManager.swift         AVAudioEngine + FFT (vDSP) + detección de beats
+├── AudioManager.swift         Process tap de CoreAudio + FFT (vDSP) + beats
 ├── GlowWindow.swift           Ventanas overlay transparentes + GlowController
 ├── GlowView.swift             Dibujo de los 4 bordes con NSGradient
 ├── PreferencesManager.swift   Wrapper de UserDefaults
-├── Info.plist                 LSUIElement + permisos de audio
-└── nLight.entitlements        Entrada de audio bajo hardened runtime
+├── Info.plist                 LSUIElement + permiso de captura de audio
+└── nLight.entitlements        Captura de audio bajo hardened runtime
 ```
 
 **Flujo de datos:**
 
 ```
-AVAudioEngine ─tap─▶ buffer circular ─▶ Hamming ─▶ vDSP_fft_zrip ─▶ magnitudes
+process tap ─IOProc─▶ buffer circular ─▶ Hamming ─▶ vDSP_fft_zrip ─▶ magnitudes
                                                                         │
                         beat ◀── energía 0-250 Hz vs. media móvil ◀──────┤
                                                                         │
    GlowView ◀── suavizado 0.15 @60 fps ◀── nivel normalizado ◀───────────┘
 ```
 
-- El análisis corre en el hilo de audio en tiempo real: sin locks largos ni
-  asignaciones de memoria dentro del *tap*.
+- El análisis corre en la cola de audio del IOProc: sin locks largos ni
+  asignaciones de memoria dentro del callback.
 - El dibujo corre a 60 fps en el hilo principal, leyendo la última instantánea
   del análisis y aplicando un suavizado exponencial (factor 0.15) para que el
   halo respire en lugar de parpadear.
@@ -145,12 +152,14 @@ AVAudioEngine ─tap─▶ buffer circular ─▶ Hamming ─▶ vDSP_fft_zrip �
 
 **El brillo no aparece nunca**
 Comprueba en el menú la línea de estado: si dice *«Sin captura de audio»* o
-muestra un aviso ⚠️, revisa el permiso de micrófono en Ajustes del Sistema →
-Privacidad y seguridad → Micrófono, y vuelve a activar el brillo.
+muestra un aviso ⚠️, revisa el permiso de captura de audio en Ajustes del
+Sistema → Privacidad y seguridad, y vuelve a activar el brillo. Los errores de
+CoreAudio se registran además en Consola con el prefijo `[nLight]`.
 
-**Reacciona a mi voz en vez de a la música**
-Estás capturando el micrófono. Configura BlackHole como se explica arriba y
-selecciónalo en *Fuente de audio*.
+**El brillo no reacciona aunque suene la música**
+Comprueba que la app que reproduce va a la misma salida que nLight está
+interceptando (*Fuente de audio* en el menú). Si acabas de cambiar de
+dispositivo, desactiva y reactiva el brillo.
 
 **El brillo late demasiado o demasiado poco**
 Sube la **intensidad** para más respuesta y baja la **sensibilidad al beat** para

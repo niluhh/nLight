@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let glowController = GlowController()
 
     private var statusItem: NSStatusItem!
+    private var diagnosticsItem: NSMenuItem!
     private var toggleItem: NSMenuItem!
     private var statusInfoItem: NSMenuItem!
     private var intensityControl: SliderMenuView!
@@ -65,6 +66,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusInfoItem = NSMenuItem(title: "nLight", action: nil, keyEquivalent: "")
         statusInfoItem.isEnabled = false
         menu.addItem(statusInfoItem)
+
+        // Estado detallado de la cadena de captura. Se mantiene siempre visible
+        // para que un fallo del tap sea evidente en vez de silencioso.
+        diagnosticsItem = NSMenuItem(title: "Diagnóstico",
+                                     action: #selector(copyDiagnostics),
+                                     keyEquivalent: "")
+        diagnosticsItem.target = self
+        diagnosticsItem.toolTip = "Haz clic para copiar el diagnóstico completo al portapapeles"
+        menu.addItem(diagnosticsItem)
 
         menu.addItem(.separator())
 
@@ -186,6 +196,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildDeviceMenu()
     }
 
+    /// Vuelca el estado completo de la cadena de captura al portapapeles, para
+    /// poder pegarlo en un issue sin tener que rebuscar en Consola.
+    @objc private func copyDiagnostics() {
+        let diagnostics = audioManager.diagnostics
+        let report = """
+        nLight — diagnóstico de captura
+        Captura: process tap de CoreAudio (el proyecto no contiene ninguna ruta de micrófono)
+
+        Permiso de captura de audio : \(diagnostics.authorization)
+        Dispositivo objetivo        : \(diagnostics.targetDevice)
+        Tap                         : \(diagnostics.tap)
+        Formato (ASBD del tap)      : \(diagnostics.format)
+        Dispositivo agregado        : \(diagnostics.aggregate)
+        IOProc                      : \(diagnostics.ioProc)
+        Llamadas al IOProc          : \(diagnostics.callbackCount)
+        Último bloque               : \(diagnostics.lastBufferCount) buffer(s), \(diagnostics.lastFrameCount) frames
+        RMS del último bloque       : \(diagnostics.lastRMS)
+        Motor en marcha             : \(audioManager.isRunning)
+        Último error                : \(audioManager.lastErrorDescription ?? "ninguno")
+
+        Detalle completo en Consola.app filtrando por [nLight].
+        """
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+        NSLog("[nLight] Diagnóstico copiado al portapapeles:\n%@", report)
+    }
+
     private func refreshMenuState() {
         let enabled = preferences.isEnabled
         toggleItem.title = enabled ? "Desactivar brillo" : "Activar brillo"
@@ -198,6 +236,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusInfoItem.title = audioManager.isRunning ? "Escuchando audio" : "Sin captura de audio"
         } else {
             statusInfoItem.title = "nLight en pausa"
+        }
+
+        let diagnostics = audioManager.diagnostics
+        if enabled {
+            diagnosticsItem.title = audioManager.isRunning
+                ? "Diagnóstico: \(diagnostics.summary)"
+                : "Diagnóstico: captura detenida — \(diagnostics.tap)"
+        } else {
+            diagnosticsItem.title = "Diagnóstico: nLight en pausa"
         }
 
         intensityControl?.value = preferences.intensity

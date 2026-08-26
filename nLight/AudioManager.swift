@@ -6,10 +6,11 @@
 //  (macOS 14.4+), FFT con Accelerate y detección de beats en el rango de
 //  bajas frecuencias (0 - 250 Hz).
 //
-//  A diferencia de un tap sobre AVAudioEngine.inputNode, esto nunca escucha
-//  el micrófono: un process tap intercepta lo que reproducen las demás apps
-//  (Spotify, Music, Safari…) sin interrumpir la reproducción y sin drivers
-//  de terceros.
+//  GARANTÍA DE DISEÑO: este archivo no contiene ninguna ruta de captura por
+//  dispositivo de entrada. Un process tap solo observa audio de reproducción,
+//  así que el micrófono es inalcanzable por construcción. Si el tap falla, la
+//  captura se aborta y el error queda visible en el menú y en consola: nunca
+//  hay repliegue silencioso a otra fuente.
 //
 
 import AVFoundation
@@ -24,6 +25,30 @@ struct AudioOutputDevice: Equatable {
     let id: AudioDeviceID
     let uid: String
     let name: String
+}
+
+/// Estado de cada paso de la cadena de captura, para el menú de diagnóstico.
+/// Todos los campos se rellenan aunque el arranque falle a medias.
+struct AudioDiagnostics {
+    var authorization = "sin consultar"
+    var targetDevice = "sin resolver"
+    var tap = "sin crear"
+    var format = "sin leer"
+    var aggregate = "sin crear"
+    var ioProc = "sin instalar"
+    /// Cuántas veces ha entrado CoreAudio en el IOProc desde el último arranque.
+    var callbackCount = 0
+    var lastBufferCount = 0
+    var lastFrameCount = 0
+    /// RMS del último bloque mezclado a mono. Cero sostenido = stream equivocado.
+    var lastRMS: Float = 0
+
+    /// Resumen de una línea para el item de menú.
+    var summary: String {
+        if callbackCount == 0 { return "IOProc nunca llamado — \(ioProc)" }
+        if lastRMS <= 0.000_01 { return "IOProc activo (\(callbackCount)) pero RMS 0 — stream sin audio" }
+        return "Capturando · \(callbackCount) bloques · RMS \(String(format: "%.4f", lastRMS))"
+    }
 }
 
 /// Instantánea del análisis de audio, consumida por la capa de dibujo.
@@ -56,6 +81,21 @@ final class AudioManager: NSObject {
     private(set) var isRunning = false
     /// Último error de arranque legible por el usuario, si lo hubo.
     private(set) var lastErrorDescription: String?
+
+    /// Estado de cada paso de la cadena. Seguro de leer desde el hilo principal.
+    var diagnostics: AudioDiagnostics {
+        get { diagnosticsLock.lock(); defer { diagnosticsLock.unlock() }; return diagnosticsStorage }
+        set { diagnosticsLock.lock(); diagnosticsStorage = newValue; diagnosticsLock.unlock() }
+    }
+
+    private let diagnosticsLock = NSLock()
+    private var diagnosticsStorage = AudioDiagnostics()
+
+    /// Todo el logging del módulo lleva el mismo prefijo para poder filtrarlo
+    /// en Consola con `[nLight]`.
+    private func log(_ message: String) {
+        NSLog("[nLight] %@", message)
+    }
 
     /// Instantánea más reciente. Segura de leer desde el hilo principal.
     var snapshot: AudioSnapshot {
@@ -101,7 +141,10 @@ final class AudioManager: NSObject {
     private var energyHistory: [Float] = []
     private var bassPeak: Float = 1e-4
     private var overallPeak: Float = 1e-4
-    private var sampleRate: Float = 48000
+    /// Frecuencia de muestreo REAL leída de `kAudioTapPropertyFormat`.
+    /// Cero significa «todavía no hay formato válido»: mientras valga cero no se
+    /// analiza nada, para que nunca se asuma una frecuencia que no es la del tap.
+    private var sampleRate: Float = 0
     /// Copia local de la preferencia: el hilo de audio no debe tocar UserDefaults.
     private var beatSensitivity: Float = Float(PreferencesManager.Defaults.sensitivity)
 
@@ -165,6 +208,14 @@ final class AudioManager: NSObject {
     func start() -> Bool {
         guard !isRunning else { return true }
         lastErrorDescription = nil
+        diagnostics = AudioDiagnostics()
+
+        log("──────── arranque de captura ────────")
+        log("Build: process tap de CoreAudio (sin ninguna ruta de micrófono).")
+
+        // Prioridad 3: el estado TCC se registra ANTES de tocar el tap, porque
+        // un permiso denegado es la causa más probable de que el tap no entregue nada.
+        logAuthorizationStatus()
 
         guard let device = resolveTargetDevice() else {
             fail("No se encontró ningún dispositivo de salida que interceptar.")
@@ -176,17 +227,37 @@ final class AudioManager: NSObject {
             return false
         }
 
-        guard createTap(), createAggregateDevice(around: deviceUID), readTapFormat(), startIO() else {
+        let deviceName = AudioManager.stringProperty(kAudioObjectPropertyName, of: device) ?? "(sin nombre)"
+        diagnostics.targetDevice = "\(deviceName) [\(deviceUID)] id=\(device)"
+        log("Dispositivo objetivo: «\(deviceName)» id=\(device) uid=\(deviceUID)")
+        log("Canales de salida del objetivo: \(AudioManager.outputChannelCount(of: device))")
+
+        guard createTap(), readTapFormat(), createAggregateDevice(around: deviceUID), startIO() else {
+            log("El arranque falló: se desmonta todo. NO hay repliegue a ninguna otra fuente.")
             teardown()
             return false
         }
 
         observeDefaultOutputDevice()
         isRunning = true
-        NSLog("[nLight] Captura de salida activa sobre «%@» a %.0f Hz.",
-              AudioManager.stringProperty(kAudioObjectPropertyName, of: device) ?? deviceUID,
-              Double(sampleRate))
+        log("Captura activa sobre «\(deviceName)» a \(Int(sampleRate)) Hz.")
+        log("Si en 2 s no aparecen líneas «IOProc», el agregado no está entregando audio.")
         return true
+    }
+
+    /// Registra el estado del permiso con el que macOS protege los process taps.
+    private func logAuthorizationStatus() {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        let text: String
+        switch status {
+        case .authorized: text = "concedido"
+        case .denied: text = "DENEGADO — Ajustes → Privacidad y seguridad; sin esto el tap no entrega audio"
+        case .restricted: text = "restringido por política del sistema"
+        case .notDetermined: text = "sin determinar (aún no se ha pedido)"
+        @unknown default: text = "desconocido (\(status.rawValue))"
+        }
+        diagnostics.authorization = text
+        log("Permiso de captura de audio: \(text)")
     }
 
     func stop() {
@@ -197,9 +268,17 @@ final class AudioManager: NSObject {
         reset()
     }
 
+    /// Reconstruye la captura entera. `stop()` destruye el IOProc, el agregado y
+    /// el tap, y deja `tapFormat`/`sampleRate` a cero; `start()` crea un tap nuevo
+    /// y relee su ASBD. En ningún momento se reutiliza el formato anterior, que es
+    /// lo que provocaría un desajuste al cambiar de dispositivo.
     func restart() {
+        log("Reconstrucción completa de la captura solicitada.")
         stop()
-        _ = start()
+        if !start() {
+            // La app sigue viva con el glow apagado: el error queda en el menú.
+            log("La reconstrucción falló. La captura queda detenida y el error visible en el menú.")
+        }
     }
 
     /// Dispositivo elegido en preferencias, o la salida por defecto del sistema.
@@ -224,10 +303,22 @@ final class AudioManager: NSObject {
 
         var identifier = AudioObjectID(kAudioObjectUnknown)
         let status = AudioHardwareCreateProcessTap(description, &identifier)
-        guard check(status, "AudioHardwareCreateProcessTap") else { return false }
+
+        log("AudioHardwareCreateProcessTap → OSStatus \(status) (\(AudioManager.describe(status))), objectID=\(identifier)")
+        guard check(status, "AudioHardwareCreateProcessTap") else {
+            diagnostics.tap = "FALLÓ: \(AudioManager.describe(status))"
+            return false
+        }
+        guard identifier != AudioObjectID(kAudioObjectUnknown) else {
+            diagnostics.tap = "FALLÓ: objectID inválido pese a OSStatus 0"
+            fail("El tap devolvió noErr pero con un objectID inválido.")
+            return false
+        }
 
         tapID = identifier
         tapUUID = description.uuid
+        diagnostics.tap = "ok · objectID=\(identifier) · uuid=\(description.uuid.uuidString)"
+        log("Tap creado: uuid=\(description.uuid.uuidString) privado=\(description.isPrivate) mute=\(description.muteBehavior.rawValue)")
         return true
     }
 
@@ -261,11 +352,36 @@ final class AudioManager: NSObject {
             ]
         ]
 
+        // Volcado del diccionario ANTES de crear nada: si el agregado sale mal,
+        // aquí se ve exactamente con qué sub-device y qué tap se pidió.
+        log("""
+            Configuración del agregado (antes de crearlo):
+              nombre        = nLight Capture
+              main/master   = \(outputDeviceUID)
+              privado       = true
+              stacked       = false
+              tapAutoStart  = true
+              subDeviceList = [\(outputDeviceUID)]
+              tapList       = [\(tapUUID.uuidString)] (driftCompensation=true)
+            """)
+
         var identifier = AudioObjectID(kAudioObjectUnknown)
         let status = AudioHardwareCreateAggregateDevice(description as CFDictionary, &identifier)
-        guard check(status, "AudioHardwareCreateAggregateDevice") else { return false }
+
+        log("AudioHardwareCreateAggregateDevice → OSStatus \(status) (\(AudioManager.describe(status))), deviceID=\(identifier)")
+        guard check(status, "AudioHardwareCreateAggregateDevice") else {
+            diagnostics.aggregate = "FALLÓ: \(AudioManager.describe(status))"
+            return false
+        }
+        guard identifier != AudioObjectID(kAudioObjectUnknown) else {
+            diagnostics.aggregate = "FALLÓ: deviceID inválido pese a OSStatus 0"
+            fail("El agregado devolvió noErr pero con un deviceID inválido.")
+            return false
+        }
 
         aggregateID = identifier
+        diagnostics.aggregate = "ok · deviceID=\(identifier)"
+        log("Agregado creado: deviceID=\(identifier), canales de entrada=\(AudioManager.inputChannelCount(of: identifier))")
         return true
     }
 
@@ -280,19 +396,46 @@ final class AudioManager: NSObject {
         var format = AudioStreamBasicDescription()
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         let status = AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &format)
-        guard check(status, "Lectura de kAudioTapPropertyFormat") else { return false }
 
-        guard format.mFormatFlags & kAudioFormatFlagIsFloat != 0 else {
-            fail("El tap entregó un formato no flotante (\(format.mFormatID)); no soportado.")
+        log("kAudioTapPropertyFormat → OSStatus \(status) (\(AudioManager.describe(status)))")
+        guard check(status, "Lectura de kAudioTapPropertyFormat") else {
+            diagnostics.format = "FALLÓ: \(AudioManager.describe(status))"
             return false
         }
-        guard format.mSampleRate > 0 else {
-            fail("El tap entregó una frecuencia de muestreo inválida.")
+
+        // Volcado completo del ASBD: es la referencia para saber si el formato
+        // que entrega el hardware coincide con el que estamos interpretando.
+        log("""
+            ASBD del tap:
+              mSampleRate       = \(format.mSampleRate)
+              mFormatID         = \(AudioManager.fourCharCode(OSStatus(bitPattern: format.mFormatID)))
+              mFormatFlags      = 0x\(String(format.mFormatFlags, radix: 16)) \
+            (float=\(format.mFormatFlags & kAudioFormatFlagIsFloat != 0), \
+            nonInterleaved=\(format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0), \
+            packed=\(format.mFormatFlags & kAudioFormatFlagIsPacked != 0))
+              mBytesPerPacket   = \(format.mBytesPerPacket)
+              mFramesPerPacket  = \(format.mFramesPerPacket)
+              mBytesPerFrame    = \(format.mBytesPerFrame)
+              mChannelsPerFrame = \(format.mChannelsPerFrame)
+              mBitsPerChannel   = \(format.mBitsPerChannel)
+            """)
+
+        guard format.mFormatFlags & kAudioFormatFlagIsFloat != 0 else {
+            diagnostics.format = "FALLÓ: formato no flotante"
+            fail("El tap entregó un formato no flotante; no soportado.")
+            return false
+        }
+        guard format.mSampleRate > 0, format.mChannelsPerFrame > 0 else {
+            diagnostics.format = "FALLÓ: sample rate o canales inválidos"
+            fail("El tap entregó un formato inválido (\(format.mSampleRate) Hz, \(format.mChannelsPerFrame) canales).")
             return false
         }
 
         tapFormat = format
+        // La FFT se adapta a ESTE sample rate. Nunca se asume ninguno.
         sampleRate = Float(format.mSampleRate)
+        diagnostics.format = "\(Int(format.mSampleRate)) Hz · \(format.mChannelsPerFrame) canales · Float32"
+        log("La FFT se adapta a \(Int(format.mSampleRate)) Hz → resolución de \(String(format: "%.2f", format.mSampleRate / Double(AudioManager.fftSize))) Hz por bin.")
         return true
     }
 
@@ -306,14 +449,27 @@ final class AudioManager: NSObject {
         ) { [weak self] _, inputData, _, _, _ in
             self?.ingest(inputData)
         }
+        log("AudioDeviceCreateIOProcIDWithBlock → OSStatus \(createStatus) (\(AudioManager.describe(createStatus)))")
         guard check(createStatus, "AudioDeviceCreateIOProcIDWithBlock"), let procID else {
+            diagnostics.ioProc = "FALLÓ al instalar: \(AudioManager.describe(createStatus))"
             return false
         }
         ioProcID = procID
 
         let startStatus = AudioDeviceStart(aggregateID, procID)
-        guard check(startStatus, "AudioDeviceStart") else { return false }
+        log("AudioDeviceStart → OSStatus \(startStatus) (\(AudioManager.describe(startStatus)))")
+        guard check(startStatus, "AudioDeviceStart") else {
+            diagnostics.ioProc = "FALLÓ al arrancar: \(AudioManager.describe(startStatus))"
+            return false
+        }
+
+        diagnostics.ioProc = "instalado y arrancado"
         return true
+    }
+
+    /// Canales de entrada de un dispositivo: en el agregado son los que aporta el tap.
+    private static func inputChannelCount(of device: AudioDeviceID) -> Int {
+        channelCount(of: device, scope: kAudioObjectPropertyScopeInput)
     }
 
     /// Desmonta el tap y todo lo construido a su alrededor, en orden inverso.
@@ -348,6 +504,8 @@ final class AudioManager: NSObject {
         overallPeak = 1e-4
         ringWriteIndex = 0
         samplesSinceLastFFT = 0
+        // El formato muere con la sesión: la siguiente arranca releyendo el ASBD.
+        sampleRate = 0
         stateLock.unlock()
     }
 
@@ -397,11 +555,15 @@ final class AudioManager: NSObject {
 
     /// Se ejecuta en la cola de audio: mezcla a mono y alimenta el buffer circular.
     private func ingest(_ bufferList: UnsafePointer<AudioBufferList>) {
-        guard let format = tapFormat else { return }
+        // Sin un formato recién leído no se procesa nada: tras un cambio de
+        // dispositivo, `teardown()` deja esto en nil hasta releer el ASBD nuevo.
+        guard let format = tapFormat, sampleRate > 0 else { return }
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
         guard buffers.count > 0 else { return }
 
         let isNonInterleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        var sumOfSquares: Float = 0
+        var processedFrames = 0
 
         if isNonInterleaved {
             let channels = buffers.compactMap { $0.mData?.assumingMemoryBound(to: Float.self) }
@@ -411,8 +573,11 @@ final class AudioManager: NSObject {
             for frame in 0..<frameCount {
                 var sum: Float = 0
                 for channel in channels { sum += channel[frame] }
-                push(sum * scale)
+                let mono = sum * scale
+                sumOfSquares += mono * mono
+                push(mono)
             }
+            processedFrames = frameCount
         } else {
             let buffer = buffers[0]
             guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { return }
@@ -423,9 +588,33 @@ final class AudioManager: NSObject {
             for frame in 0..<frameCount {
                 var sum: Float = 0
                 for channel in 0..<channelCount { sum += data[frame * channelCount + channel] }
-                push(sum * scale)
+                let mono = sum * scale
+                sumOfSquares += mono * mono
+                push(mono)
             }
+            processedFrames = frameCount
         }
+
+        let rms = processedFrames > 0 ? sqrt(sumOfSquares / Float(processedFrames)) : 0
+        recordCallback(buffers: buffers.count, frames: processedFrames, rms: rms)
+    }
+
+    /// Actualiza el diagnóstico del IOProc y lo vuelca a consola con moderación:
+    /// las primeras llamadas para confirmar que arranca, y luego cada pocos
+    /// segundos para no inundar la Consola.
+    private func recordCallback(buffers: Int, frames: Int, rms: Float) {
+        diagnosticsLock.lock()
+        diagnosticsStorage.callbackCount += 1
+        diagnosticsStorage.lastBufferCount = buffers
+        diagnosticsStorage.lastFrameCount = frames
+        diagnosticsStorage.lastRMS = rms
+        let count = diagnosticsStorage.callbackCount
+        diagnosticsLock.unlock()
+
+        let shouldLog = count <= 3 || count % 500 == 0
+        guard shouldLog else { return }
+        log("IOProc #\(count): \(buffers) buffer(s), \(frames) frames, RMS \(String(format: "%.6f", rms))"
+            + (rms <= 0.000_01 ? "  ← silencio absoluto: o no suena nada, o el stream no es el correcto" : ""))
     }
 
     /// Acumula una muestra y lanza la FFT cada medio solapamiento.
@@ -497,6 +686,9 @@ final class AudioManager: NSObject {
     /// Convierte el espectro en niveles normalizados y decide si hubo beat.
     private func updateLevels() {
         let half = AudioManager.fftSize / 2
+        // Sin formato válido no hay análisis posible: `Int(x / 0)` sería infinito
+        // y convertirlo a entero abortaría el proceso.
+        guard sampleRate > 0 else { return }
         let binWidth = sampleRate / Float(AudioManager.fftSize)
         // El bin 0 es DC: se descarta para no falsear la energía de graves.
         let firstBassBin = 1
@@ -645,9 +837,19 @@ final class AudioManager: NSObject {
     }
 
     private static func outputChannelCount(of device: AudioDeviceID) -> Int {
+        channelCount(of: device, scope: kAudioObjectPropertyScopeOutput)
+    }
+
+    /// Cuenta canales en un scope concreto.
+    ///
+    /// Ojo al leer esto: el único uso del scope de ENTRADA es contar los canales
+    /// que el *tap* aporta al dispositivo agregado, como dato de diagnóstico.
+    /// No hay ninguna captura asociada, y jamás se consulta sobre un micrófono.
+    private static func channelCount(of device: AudioDeviceID,
+                                     scope: AudioObjectPropertyScope) -> Int {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioObjectPropertyScopeOutput,
+            mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
 

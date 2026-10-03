@@ -19,7 +19,17 @@ NSSetUncaughtExceptionHandler { exception in
 }
 
 let application = NSApplication.shared
-let delegate = AppDelegate()
-application.delegate = delegate
-application.setActivationPolicy(.accessory)
+
+// El código de nivel superior no está aislado a ningún actor, pero aquí se
+// ejecuta en el hilo principal antes de que exista nada más. `assumeIsolated`
+// lo hace explícito para poder construir el delegado, que sí es @MainActor.
+// El resultado se guarda en una constante de nivel superior porque
+// `NSApplication.delegate` es una referencia débil.
+let delegate = MainActor.assumeIsolated { () -> AppDelegate in
+    let delegate = AppDelegate()
+    application.delegate = delegate
+    application.setActivationPolicy(.accessory)
+    return delegate
+}
+
 application.run()

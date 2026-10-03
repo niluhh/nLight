@@ -105,7 +105,9 @@ final class GlowController: NSObject {
         guard displayTimer == nil else { return }
 
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.tick()
+            // El temporizador está en el run loop principal, así que el disparo
+            // ya ocurre en el hilo principal; el bloque en sí no está aislado.
+            MainActor.assumeIsolated { self?.tick() }
         }
         // `.common` mantiene viva la animación mientras el menú está abierto.
         RunLoop.main.add(timer, forMode: .common)

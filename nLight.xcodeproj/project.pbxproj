@@ -1,0 +1,367 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BF0100000000000000000000 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0100000000000000000000 /* main.swift */; };
+		BF0200000000000000000000 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0200000000000000000000 /* AppDelegate.swift */; };
+		BF0300000000000000000000 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0300000000000000000000 /* AudioManager.swift */; };
+		BF0400000000000000000000 /* GlowWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0400000000000000000000 /* GlowWindow.swift */; };
+		BF0500000000000000000000 /* GlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0500000000000000000000 /* GlowView.swift */; };
+		BF0600000000000000000000 /* PreferencesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0600000000000000000000 /* PreferencesManager.swift */; };
+		BF0700000000000000000000 /* ColorSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1000000000000000000000 /* ColorSampler.swift */; };
+		BF0E00000000000000000000 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0E00000000000000000000 /* ScreenCaptureKit.framework */; };
+		BF0A00000000000000000000 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0A00000000000000000000 /* Accelerate.framework */; };
+		BF0B00000000000000000000 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0B00000000000000000000 /* AVFoundation.framework */; };
+		BF0C00000000000000000000 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0C00000000000000000000 /* CoreAudio.framework */; };
+		BF0D00000000000000000000 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0D00000000000000000000 /* AppKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		FE0100000000000000000000 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		FE0200000000000000000000 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		FE0300000000000000000000 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
+		FE0400000000000000000000 /* GlowWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowWindow.swift; sourceTree = "<group>"; };
+		FE0500000000000000000000 /* GlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowView.swift; sourceTree = "<group>"; };
+		FE0600000000000000000000 /* PreferencesManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesManager.swift; sourceTree = "<group>"; };
+		FE1000000000000000000000 /* ColorSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSampler.swift; sourceTree = "<group>"; };
+		FE0E00000000000000000000 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
+		FE0700000000000000000000 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FE0800000000000000000000 /* nLight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nLight.entitlements; sourceTree = "<group>"; };
+		FE0900000000000000000000 /* nLight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = nLight.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FE0A00000000000000000000 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		FE0B00000000000000000000 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		FE0C00000000000000000000 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
+		FE0D00000000000000000000 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AC0200000000000000000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0A00000000000000000000 /* Accelerate.framework in Frameworks */,
+				BF0B00000000000000000000 /* AVFoundation.framework in Frameworks */,
+				BF0C00000000000000000000 /* CoreAudio.framework in Frameworks */,
+				BF0D00000000000000000000 /* AppKit.framework in Frameworks */,
+				BF0E00000000000000000000 /* ScreenCaptureKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6E0100000000000000000000 = {
+			isa = PBXGroup;
+			children = (
+				6E0200000000000000000000 /* nLight */,
+				6E0400000000000000000000 /* Frameworks */,
+				6E0300000000000000000000 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6E0200000000000000000000 /* nLight */ = {
+			isa = PBXGroup;
+			children = (
+				FE0100000000000000000000 /* main.swift */,
+				FE0200000000000000000000 /* AppDelegate.swift */,
+				FE0300000000000000000000 /* AudioManager.swift */,
+				FE0400000000000000000000 /* GlowWindow.swift */,
+				FE0500000000000000000000 /* GlowView.swift */,
+				FE1000000000000000000000 /* ColorSampler.swift */,
+				FE0600000000000000000000 /* PreferencesManager.swift */,
+				FE0700000000000000000000 /* Info.plist */,
+				FE0800000000000000000000 /* nLight.entitlements */,
+			);
+			path = nLight;
+			sourceTree = "<group>";
+		};
+		6E0300000000000000000000 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FE0900000000000000000000 /* nLight.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6E0400000000000000000000 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FE0A00000000000000000000 /* Accelerate.framework */,
+				FE0B00000000000000000000 /* AVFoundation.framework */,
+				FE0C00000000000000000000 /* CoreAudio.framework */,
+				FE0D00000000000000000000 /* AppKit.framework */,
+				FE0E00000000000000000000 /* ScreenCaptureKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DA0100000000000000000000 /* nLight */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CC0200000000000000000000 /* Build configuration list for PBXNativeTarget "nLight" */;
+			buildPhases = (
+				AC0100000000000000000000 /* Sources */,
+				AC0200000000000000000000 /* Frameworks */,
+				AC0300000000000000000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = nLight;
+			productName = nLight;
+			productReference = FE0900000000000000000000 /* nLight.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EA0100000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					DA0100000000000000000000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = CC0100000000000000000000 /* Build configuration list for PBXProject "nLight" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 6E0100000000000000000000;
+			productRefGroup = 6E0300000000000000000000 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DA0100000000000000000000 /* nLight */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AC0300000000000000000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AC0100000000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0100000000000000000000 /* main.swift in Sources */,
+				BF0200000000000000000000 /* AppDelegate.swift in Sources */,
+				BF0300000000000000000000 /* AudioManager.swift in Sources */,
+				BF0400000000000000000000 /* GlowWindow.swift in Sources */,
+				BF0500000000000000000000 /* GlowView.swift in Sources */,
+				BF0600000000000000000000 /* PreferencesManager.swift in Sources */,
+				BF0700000000000000000000 /* ColorSampler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CF0100000000000000000000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		CF0200000000000000000000 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		CF0300000000000000000000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = nLight/nLight.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = nLight/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nlight.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CF0400000000000000000000 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = nLight/nLight.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = nLight/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nlight.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CC0100000000000000000000 /* Build configuration list for PBXProject "nLight" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0100000000000000000000 /* Debug */,
+				CF0200000000000000000000 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CC0200000000000000000000 /* Build configuration list for PBXNativeTarget "nLight" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0300000000000000000000 /* Debug */,
+				CF0400000000000000000000 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = EA0100000000000000000000 /* Project object */;
+}

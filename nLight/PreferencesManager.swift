@@ -20,6 +20,7 @@ final class PreferencesManager {
         static let thickness = "nLight.thickness"
         static let horizontalColor = "nLight.horizontalColor"
         static let verticalColor = "nLight.verticalColor"
+        static let followsSpotifyColors = "nLight.followsSpotifyColors"
         static let sensitivity = "nLight.sensitivity"
         static let inputDeviceUID = "nLight.inputDeviceUID"
     }
@@ -39,6 +40,7 @@ final class PreferencesManager {
         static let horizontalColor = NSColor.systemRed
         /// Bordes izquierdo y derecho.
         static let verticalColor = NSColor.systemBlue
+        static let followsSpotifyColors = false
     }
 
     /// Factor de suavizado de la animación (0 = congelado, 1 = sin suavizar).
@@ -90,6 +92,17 @@ final class PreferencesManager {
         set { set(color: newValue, forKey: Key.verticalColor) }
     }
 
+    /// Si está activo, los colores de los bordes se derivan de la ventana de
+    /// Spotify en vez de los guardados arriba, que quedan intactos para cuando
+    /// se desactive.
+    var followsSpotifyColors: Bool {
+        get {
+            defaults.object(forKey: Key.followsSpotifyColors) as? Bool
+                ?? Defaults.followsSpotifyColors
+        }
+        set { defaults.set(newValue, forKey: Key.followsSpotifyColors); notifyChange() }
+    }
+
     /// UID CoreAudio del dispositivo de entrada elegido. `nil` = entrada por defecto del sistema.
     var inputDeviceUID: String? {
         get { defaults.string(forKey: Key.inputDeviceUID) }
@@ -98,7 +111,8 @@ final class PreferencesManager {
 
     func resetToDefaults() {
         for key in [Key.enabled, Key.intensity, Key.thickness, Key.horizontalColor,
-                    Key.verticalColor, Key.sensitivity, Key.inputDeviceUID] {
+                    Key.verticalColor, Key.sensitivity, Key.inputDeviceUID,
+                    Key.followsSpotifyColors] {
             defaults.removeObject(forKey: key)
         }
         notifyChange()

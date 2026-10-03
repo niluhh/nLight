@@ -20,6 +20,12 @@ final class GlowView: NSView {
         didSet { if abs(beatFlash - oldValue) > 0.001 { needsDisplay = true } }
     }
 
+    /// Colores que sustituyen a los de preferencias mientras el seguimiento de
+    /// Spotify está activo. A `nil`, mandan los colores manuales guardados.
+    var paletteOverride: GlowPalette? {
+        didSet { if paletteOverride != oldValue { needsDisplay = true } }
+    }
+
     override var isOpaque: Bool { false }
     override var isFlipped: Bool { false }
 
@@ -46,8 +52,8 @@ final class GlowView: NSView {
         context.compositingOperation = .plusLighter
 
         let bounds = self.bounds
-        let horizontal = preferences.horizontalColor
-        let vertical = preferences.verticalColor
+        let horizontal = paletteOverride?.horizontal ?? preferences.horizontalColor
+        let vertical = paletteOverride?.vertical ?? preferences.verticalColor
 
         // Superior: opaco arriba, desvanecido hacia abajo.
         draw(gradientFor: horizontal, alpha: alpha,

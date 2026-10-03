@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let preferences = PreferencesManager.shared
     private let audioManager = AudioManager()
     private let glowController = GlowController()
+    private let colorSampler = ColorSampler()
 
     private var statusItem: NSStatusItem!
     private var diagnosticsItem: NSMenuItem!
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var intensityControl: SliderMenuView!
     private var thicknessControl: SliderMenuView!
     private var sensitivityControl: SliderMenuView!
+    private var spotifyColorsItem: NSMenuItem!
     private var horizontalColorItem: NSMenuItem!
     private var verticalColorItem: NSMenuItem!
     private var deviceMenu: NSMenu!
@@ -36,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         glowController.snapshotProvider = { [weak self] in
             self?.audioManager.snapshot ?? AudioSnapshot()
         }
+        glowController.paletteProvider = { [weak self] in
+            self?.colorSampler.palette
+        }
 
         buildStatusItem()
         refreshMenuState()
@@ -48,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         glowController.stop()
         audioManager.stop()
+        colorSampler.stop()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
@@ -117,6 +123,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(menuItem(hosting: sensitivityControl))
 
         menu.addItem(.separator())
+
+        spotifyColorsItem = NSMenuItem(title: "Seguir los colores de Spotify",
+                                       action: #selector(toggleSpotifyColors),
+                                       keyEquivalent: "")
+        spotifyColorsItem.target = self
+        spotifyColorsItem.toolTip = "Deriva los colores del glow del fondo de la ventana de Spotify"
+        menu.addItem(spotifyColorsItem)
 
         horizontalColorItem = NSMenuItem(title: "Color superior / inferior", action: nil, keyEquivalent: "")
         horizontalColorItem.submenu = colorSubmenu(for: .horizontal)
@@ -250,8 +263,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         intensityControl?.value = preferences.intensity
         thicknessControl?.value = preferences.thickness
         sensitivityControl?.value = preferences.sensitivity
-        horizontalColorItem?.image = ColorPreset.swatch(for: preferences.horizontalColor)
-        verticalColorItem?.image = ColorPreset.swatch(for: preferences.verticalColor)
+        let following = preferences.followsSpotifyColors
+        spotifyColorsItem.state = following ? .on : .off
+        spotifyColorsItem.title = following
+            ? "Colores de Spotify: \(colorSampler.status)"
+            : "Seguir los colores de Spotify"
+
+        // Con el seguimiento activo los colores manuales no pintan nada: se
+        // dejan accesibles pero atenuados para que se note que no mandan.
+        horizontalColorItem?.isEnabled = !following
+        verticalColorItem?.isEnabled = !following
+
+        if let palette = colorSampler.palette, following {
+            horizontalColorItem?.image = ColorPreset.swatch(for: palette.horizontal)
+            verticalColorItem?.image = ColorPreset.swatch(for: palette.vertical)
+        } else {
+            horizontalColorItem?.image = ColorPreset.swatch(for: preferences.horizontalColor)
+            verticalColorItem?.image = ColorPreset.swatch(for: preferences.verticalColor)
+        }
     }
 
     private func rebuildDeviceMenu() {
@@ -294,6 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             glowController.stop()
             audioManager.stop()
+            colorSampler.stop()
         }
         refreshMenuState()
     }
@@ -328,6 +358,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             audioManager.restart()
         }
         refreshMenuState()
+    }
+
+    /// Activa o desactiva el seguimiento de color. Los colores manuales se
+    /// conservan intactos y vuelven a mandar en cuanto se desactiva.
+    @objc private func toggleSpotifyColors() {
+        preferences.followsSpotifyColors.toggle()
+        syncColorSampler()
+        refreshMenuState()
+    }
+
+    /// El muestreador solo corre si el glow está encendido y el seguimiento activo:
+    /// no tiene sentido capturar pantalla para unos bordes que no se dibujan.
+    private func syncColorSampler() {
+        if preferences.isEnabled && preferences.followsSpotifyColors {
+            colorSampler.start()
+        } else {
+            colorSampler.stop()
+        }
     }
 
     @objc private func resetPreferences() {
@@ -388,6 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.presentAudioErrorAlert()
             }
             self.glowController.start()
+            self.syncColorSampler()
             self.refreshMenuState()
         }
     }

@@ -19,6 +19,7 @@ cuentas, sin red: el audio se analiza en memoria y nunca sale de tu Mac.
 | 🔊 **Solo audio del sistema** | Un *process tap* de CoreAudio intercepta lo que suena en Spotify, Music o el navegador. **Nunca escucha el micrófono** y no hace falta ningún driver de terceros. |
 | 🎚️ **Análisis FFT** | Ventana de 2048 muestras con ventana de Hamming y solapamiento del 50 %, vía `Accelerate` / vDSP. |
 | 🥁 **Detección de beats** | Energía instantánea contra media móvil de ~1 s en la banda **0 – 250 Hz**, con umbral y tiempo de espera configurables. |
+| 🎨 **Colores de Spotify** | Opcional: muestrea la ventana de Spotify y deriva los colores del glow del fondo que Spotify calcula a partir de la portada. Requiere permiso de Grabación de pantalla. |
 | 🌈 **Cuatro bordes** | Superior e inferior con un color; izquierda y derecha con otro. Rojo y azul por defecto. |
 | 🕹️ **Menú de control** | Toggle On/Off, deslizadores de intensidad, grosor y sensibilidad, y selector de color con presets o el color picker del sistema. |
 | 🖥️ **Multi-pantalla** | Una ventana overlay por pantalla, con reconstrucción automática al conectar o desconectar monitores. |
@@ -82,11 +83,34 @@ El binario queda en `~/Library/Developer/Xcode/DerivedData/nLight-*/Build/Produc
    - **Grosor** — anchura máxima del halo en píxeles
    - **Sensibilidad al beat** — cuánto debe destacar un golpe sobre la media
      para contar como beat
+   - **Seguir los colores de Spotify** — ver abajo
    - **Color superior / inferior** y **Color izquierda / derecha**
    - **Fuente de audio** — salida por defecto del sistema, o unos altavoces /
      auriculares concretos si tienes varios
 
 El brillo solo aparece cuando hay señal: en silencio los bordes se apagan solos.
+
+### Seguir los colores de Spotify
+
+Con esta opción activada, nLight toma el color del glow de la propia ventana de
+Spotify en vez de los colores guardados:
+
+1. Localiza la ventana de Spotify con ScreenCaptureKit (solo esa ventana, nunca
+   el resto de la pantalla) y captura una miniatura de 64×64 una vez por segundo.
+2. Calcula el **tono dominante** por histograma, no por media: promediar los
+   píxeles de una portada da siempre un gris parduzco, mientras que el tono más
+   repetido es justo el que Spotify usa de fondo en el modo letra. Los píxeles
+   grises y el texto blanco quedan descartados, y los más saturados pesan más.
+3. Deriva la pareja final: el tono dominante para los bordes superior e inferior,
+   y un **tono análogo (+32°)** para los laterales, que armoniza en lugar de
+   competir. Saturación y brillo se elevan a un mínimo para que el glow se vea.
+4. Funde el cambio poco a poco, así que al cambiar de canción el color se
+   desplaza suavemente en vez de saltar.
+
+Requiere permiso de **Grabación de pantalla** (Ajustes del Sistema → Privacidad y
+seguridad). Es un permiso más intrusivo que el de audio, por eso la opción viene
+desactivada: solo se usa si la enciendes. Tus colores manuales se conservan y
+vuelven a mandar en cuanto la apagas.
 
 ### Cómo captura el audio del sistema
 
@@ -119,6 +143,7 @@ nLight/
 ├── main.swift                 Arranque de NSApplication
 ├── AppDelegate.swift          Barra de menús, controles y coordinación
 ├── AudioManager.swift         Process tap de CoreAudio + FFT (vDSP) + beats
+├── ColorSampler.swift         Muestreo de la ventana de Spotify (ScreenCaptureKit)
 ├── GlowWindow.swift           Ventanas overlay transparentes + GlowController
 ├── GlowView.swift             Dibujo de los 4 bordes con NSGradient
 ├── PreferencesManager.swift   Wrapper de UserDefaults
@@ -144,7 +169,7 @@ process tap ─IOProc─▶ buffer circular ─▶ Hamming ─▶ vDSP_fft_zrip 
 - La normalización es adaptativa: un pico que decae lentamente ajusta la escala
   al volumen actual, así que la reacción es parecida con música fuerte o suave.
 
-**Frameworks:** Accelerate, AVFoundation, CoreAudio, AppKit.
+**Frameworks:** Accelerate, AVFoundation, CoreAudio, ScreenCaptureKit, AppKit.
 
 ---
 
@@ -160,6 +185,12 @@ CoreAudio se registran además en Consola con el prefijo `[nLight]`.
 Comprueba que la app que reproduce va a la misma salida que nLight está
 interceptando (*Fuente de audio* en el menú). Si acabas de cambiar de
 dispositivo, desactiva y reactiva el brillo.
+
+**Los colores de Spotify no cambian**
+El propio item del menú dice por qué: si Spotify no está abierto, si falta el
+permiso de Grabación de pantalla, o si la portada no tiene un color dominante
+claro (las carátulas en blanco y negro no dan tono). Tras conceder el permiso hay
+que reiniciar nLight, que es como macOS trata ese permiso.
 
 **El brillo late demasiado o demasiado poco**
 Sube la **intensidad** para más respuesta y baja la **sensibilidad al beat** para

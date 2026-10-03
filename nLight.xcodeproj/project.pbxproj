@@ -13,6 +13,8 @@
 		BF0400000000000000000000 /* GlowWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0400000000000000000000 /* GlowWindow.swift */; };
 		BF0500000000000000000000 /* GlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0500000000000000000000 /* GlowView.swift */; };
 		BF0600000000000000000000 /* PreferencesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0600000000000000000000 /* PreferencesManager.swift */; };
+		BF0700000000000000000000 /* ColorSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1000000000000000000000 /* ColorSampler.swift */; };
+		BF0E00000000000000000000 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0E00000000000000000000 /* ScreenCaptureKit.framework */; };
 		BF0A00000000000000000000 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0A00000000000000000000 /* Accelerate.framework */; };
 		BF0B00000000000000000000 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0B00000000000000000000 /* AVFoundation.framework */; };
 		BF0C00000000000000000000 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE0C00000000000000000000 /* CoreAudio.framework */; };
@@ -26,6 +28,8 @@
 		FE0400000000000000000000 /* GlowWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowWindow.swift; sourceTree = "<group>"; };
 		FE0500000000000000000000 /* GlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowView.swift; sourceTree = "<group>"; };
 		FE0600000000000000000000 /* PreferencesManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesManager.swift; sourceTree = "<group>"; };
+		FE1000000000000000000000 /* ColorSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSampler.swift; sourceTree = "<group>"; };
+		FE0E00000000000000000000 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
 		FE0700000000000000000000 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FE0800000000000000000000 /* nLight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = nLight.entitlements; sourceTree = "<group>"; };
 		FE0900000000000000000000 /* nLight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = nLight.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -44,6 +48,7 @@
 				BF0B00000000000000000000 /* AVFoundation.framework in Frameworks */,
 				BF0C00000000000000000000 /* CoreAudio.framework in Frameworks */,
 				BF0D00000000000000000000 /* AppKit.framework in Frameworks */,
+				BF0E00000000000000000000 /* ScreenCaptureKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +72,7 @@
 				FE0300000000000000000000 /* AudioManager.swift */,
 				FE0400000000000000000000 /* GlowWindow.swift */,
 				FE0500000000000000000000 /* GlowView.swift */,
+				FE1000000000000000000000 /* ColorSampler.swift */,
 				FE0600000000000000000000 /* PreferencesManager.swift */,
 				FE0700000000000000000000 /* Info.plist */,
 				FE0800000000000000000000 /* nLight.entitlements */,
@@ -89,6 +95,7 @@
 				FE0B00000000000000000000 /* AVFoundation.framework */,
 				FE0C00000000000000000000 /* CoreAudio.framework */,
 				FE0D00000000000000000000 /* AppKit.framework */,
+				FE0E00000000000000000000 /* ScreenCaptureKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -167,6 +174,7 @@
 				BF0400000000000000000000 /* GlowWindow.swift in Sources */,
 				BF0500000000000000000000 /* GlowView.swift in Sources */,
 				BF0600000000000000000000 /* PreferencesManager.swift in Sources */,
+				BF0700000000000000000000 /* ColorSampler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

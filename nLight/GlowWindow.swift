@@ -73,6 +73,9 @@ final class GlowController: NSObject {
     /// Fuente del nivel de audio: devuelve el análisis más reciente.
     var snapshotProvider: (() -> AudioSnapshot)?
 
+    /// Paleta derivada de Spotify, o `nil` para usar los colores de preferencias.
+    var paletteProvider: (() -> GlowPalette?)?
+
     override init() {
         super.init()
         rebuildWindows()
@@ -129,9 +132,12 @@ final class GlowController: NSObject {
         smoothedLevel += (target - smoothedLevel) * smoothing
         beatFlash = snapshot.beat ? 1 : beatFlash * 0.82
 
+        let palette = paletteProvider?()
+
         for window in windows {
             window.glowView.level = smoothedLevel
             window.glowView.beatFlash = beatFlash
+            window.glowView.paletteOverride = palette
         }
     }
 

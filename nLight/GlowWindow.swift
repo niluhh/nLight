@@ -62,6 +62,7 @@ final class GlowWindow: NSWindow {
 
 /// Mantiene una `GlowWindow` por pantalla y las sincroniza con el nivel de
 /// audio, aplicando el suavizado de la animación.
+@MainActor
 final class GlowController: NSObject {
 
     private var windows: [GlowWindow] = []

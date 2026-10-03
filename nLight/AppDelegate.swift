@@ -9,6 +9,7 @@
 import AppKit
 import AVFoundation
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private let preferences = PreferencesManager.shared
